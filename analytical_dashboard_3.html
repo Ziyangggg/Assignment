@@ -322,10 +322,53 @@ document.addEventListener('DOMContentLoaded', () => {
         const discountedSales = data.filter(d => d.discount_applied === 'Yes').length;
         const discountRate = totalOrders > 0 ? discountedSales / totalOrders : 0;
 
-        d3.select('#kpi-revenue').text(d3.format("$,.0f")(totalRevenue));
-        d3.select('#kpi-orders').text(formatNumber(totalOrders));
-        d3.select('#kpi-aov').text(formatAOV(avgOrderValue));
-        d3.select('#kpi-discount-rate').text(formatPercent(discountRate));
+        // Total Revenue (Animated)
+        d3.select('#kpi-revenue')
+            .transition()
+            .duration(800)
+            .tween("text", function() {
+                const that = d3.select(this);
+                const i = d3.interpolateNumber(parseFloat(that.text().replace(/[$,]/g, "")) || 0, totalRevenue);
+                return function(t) {
+                    that.text(d3.format("$,.0f")(i(t)));
+                };
+            });
+
+        // Total Orders (Animated)
+        d3.select('#kpi-orders')
+            .transition()
+            .duration(800)
+            .tween("text", function() {
+                const that = d3.select(this);
+                const i = d3.interpolateNumber(parseFloat(that.text().replace(/,/g, "")) || 0, totalOrders);
+                return function(t) {
+                    that.text(formatNumber(Math.round(i(t))));
+                };
+            });
+
+        // AOV (Animated)
+        d3.select('#kpi-aov')
+            .transition()
+            .duration(800)
+            .tween("text", function() {
+                const that = d3.select(this);
+                const i = d3.interpolateNumber(parseFloat(that.text().replace(/[$,]/g, "")) || 0, avgOrderValue);
+                return function(t) {
+                    that.text(formatAOV(i(t)));
+                };
+            });
+
+        // Discount Rate (Animated)
+        d3.select('#kpi-discount-rate')
+            .transition()
+            .duration(800)
+            .tween("text", function() {
+                const that = d3.select(this);
+                const i = d3.interpolateNumber(parseFloat(that.text().replace(/[%]/g, "")) / 100 || 0, discountRate);
+                return function(t) {
+                    that.text(formatPercent(i(t)));
+                };
+            });
     }
     
     // --- ANALYTICAL CHARTS ---
