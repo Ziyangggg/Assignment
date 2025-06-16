@@ -205,11 +205,29 @@
                     <p class="text-sm text-gray-500 mb-4">Comparing key metrics for subscribers vs. non-subscribers.</p>
                     <div id="tactical-chart-subscription"></div>
                 </div>
+
+
                 <div class="chart-container">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Payment Method Distribution</h3>
-                    <p class="text-sm text-gray-500 mb-4">Popularity of different payment options.</p>
-                    <div id="tactical-chart-payment"></div>
+                    <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center mb-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-800">Size and Color Breakdown of Selected Item</h3>
+                            <p class="text-sm text-gray-500">Filtered by Season and Category</p>
+                        </div>
+
+                        <!--  Filter  -->
+                        <div class="mt-2 md:mt-0">
+                            <label for="itemFilter" class="text-sm font-medium text-gray-700 mr-2">Filter by Item Purchased</label>
+                            <select id="itemFilter" class="border rounded p-1"></select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div id="tactical-chart-payment-1"></div>
+                        <div id="tactical-chart-payment-2"></div>
+                    </div>
                 </div>
+
+
                 <div class="chart-container">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">Customer Satisfaction (CSAT) Snapshot</h3>
                     <p class="text-sm text-gray-500 mb-4">Distribution of customer review ratings.</p>
@@ -304,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function drawTacticalDashboard() {
         drawSubscriptionValueChart(fullData);
-        drawPaymentDonutChart(fullData);
+        populateItemFilter(fullData);
         drawRatingDistributionChart(fullData);
         drawShippingChart(fullData);
     }
@@ -744,19 +762,97 @@ document.addEventListener('DOMContentLoaded', () => {
         legend.append("text").attr("x", 18).attr("y", 9).attr("dy", ".1em").style("text-anchor", "start").text(d => `Subscriber: ${d}`).attr("font-size", "12px");
     }
 
-    function drawPaymentDonutChart(data) {
-        const container = d3.select("#tactical-chart-payment"); container.html("");
+    function drawPaymentDonutChart(data, itemName) {
+    const filteredData = data.filter(d => d.item_purchased === itemName);
+
+        drawSingleChart("#tactical-chart-payment-1", filteredData, "size", "Size Distribution");
+        drawSingleChart("#tactical-chart-payment-2", getTopColorData(filteredData), "color", "Top 5 Colors");
+    }
+
+    function drawSingleChart(containerSelector, data, keyField, chartTitle) {
+        const container = d3.select(containerSelector);
+        container.html("");
+
         const width = container.node().getBoundingClientRect().width;
         const height = 350;
         const margin = 40;
         const radius = Math.min(width, height) / 2 - margin;
-        const svg = container.append("svg").attr("width", width).attr("height", height).append("g")
+
+        const svg = container.append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
             .attr("transform", `translate(${width / 2}, ${height / 2})`);
-        
-        const dataAgg = d3.rollup(data, v => v.length, d => d.payment_method);
+
+        svg.append("text")
+            .attr("x", 0)
+            .attr("y", -radius - 20)
+            .attr("text-anchor", "middle")
+            .attr("class", "text-base font-semibold fill-gray-700")
+            .text(chartTitle);
+
+        const dataAgg = d3.rollup(data, v => v.length, d => d[keyField]);
         const pieData = Array.from(dataAgg, ([key, value]) => ({ key, value }));
 
-        const color = d3.scaleOrdinal().domain(pieData.map(d => d.key)).range(d3.schemePaired);
+        const fixedSizeColors = {
+            "S": "#A8D5BA",
+            "M": "#84B8D9",
+            "L": "#B1AEDB",
+            "XL": "#F1C6A7"
+        };
+
+        const namedColors = {
+            Beige: "#F5F5DC",
+            Black: "#000000",
+            Blue: "#0000FF",
+            Brown: "#A52A2A",
+            Charcoal: "#36454F",
+            Cyan: "#00FFFF",
+            Gold: "#FFD700",
+            Gray: "#808080",
+            Green: "#008000",
+            Indigo: "#4B0082",
+            Lavender: "#E6E6FA",
+            Magenta: "#FF00FF",
+            Maroon: "#800000",
+            Olive: "#808000",
+            Orange: "#FFA500",
+            Peach: "#FFE5B4",
+            Pink: "#FFC0CB",
+            Purple: "#800080",
+            Red: "#FF0000",
+            Silver: "#C0C0C0",
+            Teal: "#008080",
+            Turquoise: "#40E0D0",
+            Violet: "#EE82EE",
+            White: "#FFFFFF",
+            Yellow: "#FFFF00"
+        };
+
+        let color;
+
+        if (keyField === "size") {
+            color = d => fixedSizeColors[d];
+        } else if (keyField === "color") {
+            color = d => namedColors[d] || "#CCCCCC"; // fallback for unknown color names
+        } else {
+            const scale = d3.scaleOrdinal().domain(pieData.map(d => d.key)).range(d3.schemePaired);
+            color = d => scale(d);
+        }
+
+        if (keyField === "color") {
+            const legend = container.append("div")
+                .attr("class", "flex flex-wrap justify-center gap-3 mt-4");
+
+            pieData.forEach(d => {
+                legend.append("div")
+                    .attr("class", "flex items-center space-x-1 text-sm text-gray-700")
+                    .html(`
+                        <span style="display:inline-block;width:14px;height:14px;background-color:${namedColors[d.key] || "#ccc"};border-radius:2px;"></span>
+                        <span>${d.key}</span>
+                    `);
+            });
+        }
 
         const pie = d3.pie().value(d => d.value);
         const data_ready = pie(pieData);
@@ -764,14 +860,61 @@ document.addEventListener('DOMContentLoaded', () => {
         const arc = d3.arc().innerRadius(radius * 0.5).outerRadius(radius * 0.8);
 
         svg.selectAll('path').data(data_ready).enter().append('path')
-            .attr('d', arc).attr('fill', d => color(d.data.key))
-            .attr("stroke", "white").style("stroke-width", "2px")
+            .attr('d', arc)
+            .attr('fill', d => typeof color === "function" ? color(d.data.key) : color(d.data.key))
+            .attr("stroke", "white")
+            .style("stroke-width", "2px")
             .on("mouseover", (event, d) => tooltip.style("opacity", 1))
             .on("mousemove", (event, d) => {
                 tooltip.html(`<strong>${d.data.key}</strong><br>${formatNumber(d.data.value)} purchases`)
                     .style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
             })
             .on("mouseout", () => tooltip.style("opacity", 0));
+
+        if (keyField === "size") {
+            const legend = container.append("div")
+                .attr("class", "flex justify-center gap-4 mt-4");
+
+            Object.entries(fixedSizeColors).forEach(([size, colorCode]) => {
+                legend.append("div")
+                    .attr("class", "flex items-center space-x-1 text-sm text-gray-700")
+                    .html(`
+                        <span style="display:inline-block;width:14px;height:14px;background-color:${colorCode};border-radius:2px;"></span>
+                        <span>${size}</span>
+                    `);
+            });
+        }
+    }
+
+
+    function getTopColorData(data) {
+        const colorCounts = d3.rollup(data, v => v.length, d => d.color);
+        const sortedColors = Array.from(colorCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([key, value]) => ({ color: key, count: value }));
+
+        return data.filter(d => sortedColors.map(c => c.color).includes(d.color));
+    }
+
+    function populateItemFilter(data) {
+        const select = d3.select("#itemFilter");
+        const items = Array.from(new Set(data.map(d => d.item_purchased))).sort();
+        items.forEach(item => {
+            select.append("option").attr("value", item).text(item);
+        });
+
+        select.on("change", function () {
+            drawPaymentDonutChart(data, this.value);
+        });
+
+        drawPaymentDonutChart(data, items[0]);
+    }
+
+    function splitArray(arr, parts) {
+        const result = Array.from({ length: parts }, () => []);
+        arr.forEach((item, i) => result[i % parts].push(item));
+        return result;
     }
 
     function drawRatingDistributionChart(data) {
