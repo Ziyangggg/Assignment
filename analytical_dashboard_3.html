@@ -275,7 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
         analyticalDashboard.classList.add('hidden');
         
         if (isDataLoaded && !isTacticalDrawn) {
-            drawTacticalDashboard();
+            drawTacticalDashboard(currentSeason);
             isTacticalDrawn = true;
         }
     });
@@ -306,6 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedSeason = d3.select(this).property('value');
         currentSeason = selectedSeason;
         updateAnalyticalDashboard(currentSeason);
+        drawTacticalDashboard(currentSeason);
     });
 
         
@@ -320,11 +321,13 @@ document.addEventListener('DOMContentLoaded', () => {
         drawLoyaltyChart(filteredData);
     }
     
-    function drawTacticalDashboard() {
+    function drawTacticalDashboard(season) {
+        if (!isDataLoaded) return;
+        let filteredData = (season === 'All Year') ? fullData : fullData.filter(d => d.season === season);
         drawSubscriptionValueChart(fullData);
         populateItemFilter(fullData);
-        drawItemPurchasedChart(fullData);
-        drawDiscountChart(fullData);
+        drawItemPurchasedChart(filteredData);
+        drawDiscountChart(filteredData);
     }
 
     // --- KPI Update ---
