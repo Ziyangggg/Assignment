@@ -108,7 +108,7 @@
         <!-- Filter Section -->
         <div class="flex flex-wrap gap-6">
             <!-- Season Dropdown -->
-            <div>
+            <div id="season-filter">
                 <label for="season-select" class="text-sm font-semibold text-gray-700 mb-2 block">FILTER BY SEASON</label>
                 <select id="season-select" class="px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm border border-gray-300 hover:bg-gray-100">
                     <option value="All Year">All Year</option>
@@ -120,7 +120,7 @@
             </div>
 
             <!-- Category Dropdown -->
-            <div>
+            <div id="category-filter">
                 <label for="category-select" class="text-sm font-semibold text-gray-700 mb-2 block">FILTER BY CATEGORY</label>
                 <select id="category-select" class="px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm border border-gray-300 hover:bg-gray-100">
                     <option value="All">All</option>
@@ -187,7 +187,11 @@
                     <p id="category-performance-subtitle" class="text-sm text-gray-500 mb-4">An overview of total sales across all seasons.</p>
                     <div id="chart1-category-performance"></div>
                 </div> -->
-                <div class="chart-container" style = "height: 410px;"><h3 class="text-lg font-semibold text-gray-800 mb-1">Discount Impact by Category</h3><p class="text-sm text-gray-500 mb-4">Sales with and without discount applied.</p><div id="chart2-grouped-bar"></div></div>
+                <div class="chart-container" style = "height: 410px;">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Sales Impact of Discounts Across Product Categories</h3>
+                    <p class="text-sm text-gray-500 mb-2">Analyzing Sales Count and Revenue of Discounted vs. Non-Discounted Items.</p>
+                    <div id="chart2-grouped-bar"></div>
+                </div>
                 <div class="chart-container">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">Revenue by Location</h3>
                     <p class="text-sm text-gray-500 mb-4">Top revenue states</p>
@@ -266,19 +270,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const analyticalDashboard = document.getElementById('analytical-dashboard');
     const tacticalDashboard = document.getElementById('tactical-dashboard');
 
+    const seasonFilter = document.getElementById('season-filter');
+    const categoryFilter = document.getElementById('category-filter');
+
+    seasonFilter.classList.remove('hidden');
+    categoryFilter.classList.add('hidden');
+
     analyticalTab.addEventListener('click', () => {
         analyticalTab.classList.add('active');
         tacticalTab.classList.remove('active');
         analyticalDashboard.classList.remove('hidden');
         tacticalDashboard.classList.add('hidden');
+
+        // SHOW only season filter
+        seasonFilter.classList.remove('hidden');
+        categoryFilter.classList.add('hidden');
+
+        if (isDataLoaded) {
+            updateAnalyticalDashboard(currentSeason);
+        }
     });
-    
+
     tacticalTab.addEventListener('click', () => {
         tacticalTab.classList.add('active');
         analyticalTab.classList.remove('active');
         tacticalDashboard.classList.remove('hidden');
         analyticalDashboard.classList.add('hidden');
-        
+
+        // SHOW both filters
+        seasonFilter.classList.remove('hidden');
+        categoryFilter.classList.remove('hidden');
+
         if (isDataLoaded && !isTacticalDrawn) {
             drawTacticalDashboard(currentSeason, currentCategory);
             isTacticalDrawn = true;
@@ -293,24 +315,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const formatAOV = (d) => d3.format("$,.2f")(d);
     const formatRating = (d) => d3.format(".2f")(d);
 
-    // --- Main Data Loading ---
-    Promise.all([
-        d3.csv(dataUrl, d3.autoType),
-        d3.json("us-states.json") 
-    ])
-    .then(([data, usGeoData]) => {
+    d3.csv(dataUrl, d3.autoType)
+    .then(data => {
         fullData = data;
         isDataLoaded = true;
 
         // Update dashboard
-        updateAnalyticalDashboard(currentSeason, usGeoData);
+        updateAnalyticalDashboard(currentSeason);
     })
     .catch(error => {
         console.error("Error loading the data:", error);
-        document.querySelector('main').innerHTML = `<div class="text-center p-10 bg-red-100 text-red-700 rounded-lg">
-            <h1 class="text-2xl font-bold">Error Loading Data</h1>
-            <p>Could not load <code>cleaned_shopping_behavior_updated.csv</code> or <code>us-states.json</code>.</p>
-            <p>Please make sure the files are in the same directory as this HTML file and that you are using a local server.</p></div>`;
+        document.querySelector('main').innerHTML = `
+            <div class="text-center p-10 bg-red-100 text-red-700 rounded-lg">
+                <h1 class="text-2xl font-bold">Error Loading Data</h1>
+                <p>Could not load <code>cleaned_shopping_behavior_updated.csv</code>.</p>
+                <p>Please make sure the file is in the same directory as this HTML file and that you are using a local server.</p>
+            </div>`;
     });
 
     // --- Event Listeners for Analytical Filters ---
@@ -330,7 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
         
     // --- DASHBOARD UPDATE FUNCTIONS ---
-    function updateAnalyticalDashboard(season, usGeoData) {
+    function updateAnalyticalDashboard(season) {
         if (!isDataLoaded) return;
         let filteredData = (season === 'All Year') ? fullData : fullData.filter(d => d.season === season);
         updateKPIs(filteredData);
@@ -462,10 +482,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Axes
         svg.append("g")
             .attr("transform", `translate(0, ${innerHeight})`)
-            .call(d3.axisBottom(xScale));
+            .call(d3.axisBottom(xScale))
+            .style("font-size", "12px");
 
         svg.append("g")
-            .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("~s")));
+            .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("~s")))
+            .style("font-size", "12px");
 
         // Line generator
         const line = d3.line()
@@ -569,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const categories = [...new Set(data.map(d => d.category))].sort(d3.ascending);
         const discountStatus = ['Yes', 'No'];
 
-        // 1️⃣ Count of sales
+        // Count of sales
         const countAgg = d3.rollup(
             data,
             v => v.length,
@@ -577,7 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
             d => d.discount_applied
         );
 
-        // 2️⃣ Revenue sum
+        // Revenue sum
         const revenueAgg = d3.rollup(
             data,
             v => d3.sum(v, d => d.purchase_amount_usd),
@@ -610,15 +632,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Y axis (sales count)
         svg.append("g")
-            .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s")));
+            .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s")))
+            .style("font-size", "12px");;
 
         // X axis
         svg.append("g")
             .attr("transform", `translate(0, ${innerHeight})`)
             .call(d3.axisBottom(x0))
             .selectAll("text")
-            //.attr("transform", "translate(5,0)")
-            .style("text-anchor", "center");
+            .style("text-anchor", "center")
+            .style("font-size", "12px");
 
         // Bars
         const categoryGroup = svg.selectAll(".category-group")
