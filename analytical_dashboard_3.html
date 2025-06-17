@@ -335,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let filteredData = (season === 'All Year') ? fullData : fullData.filter(d => d.season === season);
         updateKPIs(filteredData);
         drawLineChart(fullData, season);
-        drawGroupedBarWithLine(filteredData);
+        drawGroupedBarSalesCountRevenue(filteredData);
         drawLocationChart(fullData, season);
         drawShippingChart(filteredData);
     }
@@ -549,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .text(d => d);
     }
 
-    function drawGroupedBarWithLine(data) {
+    function drawGroupedBarSalesCountRevenue(data) {
         const container = d3.select("#chart2-grouped-bar");
         container.html("");
 
@@ -569,19 +569,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const categories = [...new Set(data.map(d => d.category))].sort(d3.ascending);
         const discountStatus = ['Yes', 'No'];
 
-        const dataAgg = d3.rollup(
+        // 1️⃣ Count of sales
+        const countAgg = d3.rollup(
+            data,
+            v => v.length,
+            d => d.category,
+            d => d.discount_applied
+        );
+
+        // 2️⃣ Revenue sum
+        const revenueAgg = d3.rollup(
             data,
             v => d3.sum(v, d => d.purchase_amount_usd),
             d => d.category,
             d => d.discount_applied
         );
-
-        // Calculate total revenue per category (for line)
-        const totalRevenue = categories.map(cat => {
-            const yes = dataAgg.get(cat)?.get('Yes') || 0;
-            const no = dataAgg.get(cat)?.get('No') || 0;
-            return { category: cat, total: yes + no };
-        });
 
         const x0 = d3.scaleBand()
             .domain(categories)
@@ -593,13 +595,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .range([0, x0.bandwidth()])
             .padding(0.05);
 
-        const yMaxBar = d3.max(categories, cat =>
-            d3.max(discountStatus, status => dataAgg.get(cat)?.get(status) || 0)
+        const yMax = d3.max(categories, cat =>
+            d3.max(discountStatus, status => countAgg.get(cat)?.get(status) || 0)
         );
-
-        const yMaxLine = d3.max(totalRevenue, d => d.total);
-
-        const yMax = Math.max(yMaxBar, yMaxLine);
 
         const y = d3.scaleLinear()
             .domain([0, yMax || 1])
@@ -610,7 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .domain(discountStatus)
             .range(['#3b82f6', '#9ca3af']);
 
-        // Y axis (shared)
+        // Y axis (sales count)
         svg.append("g")
             .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s")));
 
@@ -619,8 +617,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("transform", `translate(0, ${innerHeight})`)
             .call(d3.axisBottom(x0))
             .selectAll("text")
-            .attr("transform", "rotate(-45)")
-            .style("text-anchor", "end");
+            //.attr("transform", "translate(5,0)")
+            .style("text-anchor", "center");
 
         // Bars
         const categoryGroup = svg.selectAll(".category-group")
@@ -632,64 +630,77 @@ document.addEventListener('DOMContentLoaded', () => {
 
         categoryGroup.selectAll("rect")
             .data(d =>
-                discountStatus.map(s => ({
-                    key: s,
-                    value: dataAgg.get(d)?.get(s) || 0,
-                    category: d
-                }))
+                discountStatus.map(s => {
+                    const value = countAgg.get(d)?.get(s) || 0;
+                    const revenue = revenueAgg.get(d)?.get(s) || 0;
+                    return {
+                        key: s,
+                        value: value,
+                        revenue: revenue,
+                        category: d
+                    };
+                })
             )
             .enter()
             .append("rect")
             .attr("x", d => x1(d.key))
-            .attr("y", d => y(d.value))
+            .attr("y", d => y(0))  // start from bottom (y=0)
             .attr("width", x1.bandwidth())
-            .attr("height", d => innerHeight - y(d.value))
+            .attr("height", 0) // start from height=0
             .attr("fill", d => color(d.key))
             .on("mouseover", (event, d) => tooltip.style("opacity", 1))
             .on("mousemove", (event, d) => {
                 tooltip
                     .html(
-                        `<strong>${d.category}</strong><br>Discount: ${d.key}<br>Revenue: ${d3.format("$,.0f")(d.value)}`
+                        `<strong>${d.category}</strong><br>Discount: ${d.key}<br>Sales Count: ${d.value}<br>Revenue: $${d3.format(",.0f")(d.revenue)}`
                     )
                     .style("left", event.pageX + 15 + "px")
                     .style("top", event.pageY - 28 + "px");
             })
-            .on("mouseout", () => tooltip.style("opacity", 0));
+            .on("mouseout", () => tooltip.style("opacity", 0))
+            .transition()
+            .duration(800)
+            .attr("y", d => y(d.value))
+            .attr("height", d => innerHeight - y(d.value));
 
-        // Line generator (shared Y)
-        const line = d3.line()
-            .x(d => x0(d.category) + x0.bandwidth() / 2)
-            .y(d => y(d.total))
-            .curve(d3.curveMonotoneX); // smooth line
-
-        // Draw line
-        svg.append("path")
-            .datum(totalRevenue)
-            .attr("fill", "none")
-            .attr("stroke", "#f97316") // orange line
-            .attr("stroke-width", 2)
-            .attr("d", line);
-
-        // Line dots
-        svg.selectAll(".line-dot")
-            .data(totalRevenue)
+        // Labels on top of bar (wrapped: quantity / sales + revenue)
+        categoryGroup.selectAll(".bar-label")
+            .data(d =>
+                discountStatus.map(s => {
+                    const value = countAgg.get(d)?.get(s) || 0;
+                    const revenue = revenueAgg.get(d)?.get(s) || 0;
+                    return {
+                        key: s,
+                        value: value,
+                        revenue: revenue,
+                        category: d
+                    };
+                })
+            )
             .enter()
-            .append("circle")
-            .attr("class", "line-dot")
-            .attr("cx", d => x0(d.category) + x0.bandwidth() / 2)
-            .attr("cy", d => y(d.total))
-            .attr("r", 4)
-            .attr("fill", "#f97316")
-            .on("mouseover", (event, d) => tooltip.style("opacity", 1))
-            .on("mousemove", (event, d) => {
-                tooltip
-                    .html(
-                        `<strong>${d.category}</strong><br>Total Revenue: ${d3.format("$,.0f")(d.total)}`
-                    )
-                    .style("left", event.pageX + 15 + "px")
-                    .style("top", event.pageY - 28 + "px");
+            .append("text")
+            .attr("class", "bar-label")
+            .attr("x", d => x1(d.key) + x1.bandwidth() / 2)
+            .attr("y", d => y(d.value) - 20)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "11px")
+            .attr("fill", "#333")
+            .attr("opacity", 0)  // start invisible
+            .each(function(d) {
+                const text = d3.select(this);
+                text.append("tspan")
+                    .attr("x", x1(d.key) + x1.bandwidth() / 2)
+                    .attr("dy", 0)
+                    .text(`${d.value}`);
+
+                text.append("tspan")
+                    .attr("x", x1(d.key) + x1.bandwidth() / 2)
+                    .attr("dy", "1.2em")
+                    .text(` $${d3.format(",.0f")(d.revenue)}`);
             })
-            .on("mouseout", () => tooltip.style("opacity", 0));
+            .transition()
+            .duration(1000)
+            .attr("opacity", 1);
 
         // Legend
         const legendItems = ['Discount: Yes', 'Discount: No'];
