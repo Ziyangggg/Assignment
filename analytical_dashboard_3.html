@@ -229,14 +229,14 @@
 
 
                 <div class="chart-container">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Customer Satisfaction (CSAT) Snapshot</h3>
-                    <p class="text-sm text-gray-500 mb-4">Distribution of customer review ratings.</p>
-                    <div id="tactical-chart-ratings"></div>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Item Purchased Overview</h3>
+                    <p class="text-sm text-gray-500 mb-4">Top-Selling items by total purchase amount.</p>
+                    <div id="tactical-chart-item-purchased"></div>
                 </div>
                 <div class="chart-container">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Shipping Preference Overview</h3>
-                    <p class="text-sm text-gray-500 mb-4">Breakdown of chosen shipping types.</p>
-                    <div id="tactical-chart-shipping"></div>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Discount Impact on Item Sales</h3>
+                    <p class="text-sm text-gray-500 mb-4">Revenue from each item, grouped by discount status.</p>
+                    <div id="tactical-chart-discount"></div>
                 </div>
             </div>
         </div>
@@ -323,8 +323,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function drawTacticalDashboard() {
         drawSubscriptionValueChart(fullData);
         populateItemFilter(fullData);
-        drawRatingDistributionChart(fullData);
-        drawShippingChart(fullData);
+        drawItemPurchasedChart(fullData);
+        drawDiscountChart(fullData);
     }
 
     // --- KPI Update ---
@@ -917,69 +917,210 @@ document.addEventListener('DOMContentLoaded', () => {
         return result;
     }
 
-    function drawRatingDistributionChart(data) {
-        const container = d3.select("#tactical-chart-ratings"); container.html("");
+    function drawItemPurchasedChart(data) {
+        const container = d3.select("#tactical-chart-item-purchased");
+        container.html("");
+
         const width = container.node().getBoundingClientRect().width;
-        const height = 350;
-        const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+        const height = 400;
+        const margin = { top: 20, right: 30, bottom: 40, left: 150 };
         const innerWidth = width - margin.left - margin.right;
         const innerHeight = height - margin.top - margin.bottom;
-        const svg = container.append("svg").attr("width", width).attr("height", height).append("g")
+
+        const svg = container.append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
 
-        const dataAgg = d3.rollup(data, v => v.length, d => d.review_rating);
-        const ratingData = Array.from(dataAgg, ([key, value]) => ({rating: key, count: value})).sort((a,b) => a.rating - b.rating);
+        // Aggregate total purchase amount per item
+        const dataAgg = d3.rollup(
+            data,
+            v => d3.sum(v, d => d.purchase_amount_usd),
+            d => d.item_purchased
+        );
 
-        const xScale = d3.scaleBand().domain(ratingData.map(d => d.rating)).range([0, innerWidth]).padding(0.2);
-        const yScale = d3.scaleLinear().domain([0, d3.max(ratingData, d => d.count) || 1]).nice().range([innerHeight, 0]);
+        const chartData = Array.from(dataAgg, ([item, amount]) => ({ item, amount }))
+            .sort((a, b) => b.amount - a.amount)
+            .slice(0, 10); // optional: top 10 items
 
-        svg.append("g").attr("transform", `translate(0, ${innerHeight})`).call(d3.axisBottom(xScale)).append("text")
-           .attr("y", 35).attr("x", innerWidth / 2).attr("text-anchor", "middle").attr("fill", "black").text("Review Rating");
-        svg.append("g").call(d3.axisLeft(yScale).tickFormat(d3.format("~s")));
+        const yScale = d3.scaleBand()
+            .domain(chartData.map(d => d.item))
+            .range([0, innerHeight])
+            .padding(0.2);
 
-        svg.selectAll(".bar").data(ratingData).enter().append("rect").attr("class", "bar")
-            .attr("x", d => xScale(d.rating)).attr("y", d => yScale(d.count))
-            .attr("width", xScale.bandwidth()).attr("height", d => innerHeight - yScale(d.count))
-            .attr("fill", "#60a5fa")
+        const xScale = d3.scaleLinear()
+            .domain([0, d3.max(chartData, d => d.amount) || 1])
+            .range([0, innerWidth])
+            .nice();
+
+        // Y Axis
+        svg.append("g")
+            .call(d3.axisLeft(yScale).tickSize(0))
+            .selectAll("text")
+            .style("font-size", "12px");
+
+        // X Axis
+        svg.append("g")
+            .attr("transform", `translate(0, ${innerHeight})`)
+            .call(d3.axisBottom(xScale).ticks(5).tickFormat(d3.format("$,.0f")));
+
+        // Bars
+        svg.selectAll(".bar")
+            .data(chartData)
+            .enter()
+            .append("rect")
+            .attr("class", "bar")
+            .attr("y", d => yScale(d.item))
+            .attr("x", 0)
+            .attr("height", yScale.bandwidth())
+            .attr("width", d => xScale(d.amount))
+            .attr("fill", "#8b5cf6")
             .on("mouseover", (event, d) => tooltip.style("opacity", 1))
             .on("mousemove", (event, d) => {
-                tooltip.html(`<strong>Rating: ${d.rating}</strong><br>${formatNumber(d.count)} customers`)
-                    .style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
+                tooltip.html(`<strong>${d.item}</strong><br>Total Revenue: ${d3.format("$,.2f")(d.amount)}`)
+                    .style("left", (event.pageX + 15) + "px")
+                    .style("top", (event.pageY - 28) + "px");
             })
             .on("mouseout", () => tooltip.style("opacity", 0));
+
+        // X Label
+        svg.append("text")
+            .attr("x", innerWidth / 2)
+            .attr("y", innerHeight + 35)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#374151")
+            .text("Total Purchase Amount (USD)");
+
+        // Y Label (optional)
+        svg.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("x", -innerHeight / 2)
+            .attr("y", -margin.left + 20)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#374151")
     }
 
-    function drawShippingChart(data) {
-        const container = d3.select("#tactical-chart-shipping"); container.html("");
-        const width = container.node().getBoundingClientRect().width;
-        const height = 350;
-        const margin = { top: 20, right: 30, bottom: 60, left: 60 };
-        const innerWidth = width - margin.left - margin.right;
-        const innerHeight = height - margin.top - margin.bottom;
-        const svg = container.append("svg").attr("width", width).attr("height", height).append("g")
-            .attr("transform", `translate(${margin.left},${margin.top})`);
-        
-        const dataAgg = d3.rollup(data, v => v.length, d => d.shipping_type);
-        const shippingData = Array.from(dataAgg, ([key, value]) => ({type: key, count: value}));
+    function drawDiscountChart(data) {
+    const container = d3.select("#tactical-chart-discount");
+    container.html("");
 
-        const xScale = d3.scaleBand().domain(shippingData.map(d => d.type)).range([0, innerWidth]).padding(0.4);
-        const yScale = d3.scaleLinear().domain([0, d3.max(shippingData, d => d.count) || 1]).nice().range([innerHeight, 0]);
+    const width = container.node().getBoundingClientRect().width;
+    const height = 400;
+    const margin = { top: 20, right: 20, bottom: 100, left: 60 };
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
 
-        svg.append("g").attr("transform", `translate(0, ${innerHeight})`).call(d3.axisBottom(xScale))
-           .selectAll("text").attr("transform", "rotate(-40)").style("text-anchor", "end");
-        svg.append("g").call(d3.axisLeft(yScale).tickFormat(d3.format("~s")));
+    const svg = container
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
 
-        svg.selectAll(".bar").data(shippingData).enter().append("rect").attr("class", "bar")
-            .attr("x", d => xScale(d.type)).attr("y", d => yScale(d.count))
-            .attr("width", xScale.bandwidth()).attr("height", d => innerHeight - yScale(d.count))
-            .attr("fill", "#60a5fa")
-            .on("mouseover", (event, d) => tooltip.style("opacity", 1))
-            .on("mousemove", (event, d) => {
-                tooltip.html(`<strong>${d.type}</strong><br>${formatNumber(d.count)} orders`)
-                    .style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
-            })
-            .on("mouseout", () => tooltip.style("opacity", 0));
-    }
+    const discountStatus = ['Yes', 'No'];
+
+    // Aggregate by item_purchased and discount_applied
+    const dataAgg = d3.rollup(
+        data,
+        v => d3.sum(v, d => d.purchase_amount_usd),
+        d => d.item_purchased,
+        d => d.discount_applied
+    );
+
+    const items = Array.from(dataAgg.keys()).sort(d3.ascending);
+
+    const x0 = d3.scaleBand()
+        .domain(items)
+        .range([0, innerWidth])
+        .padding(0.2);
+
+    const x1 = d3.scaleBand()
+        .domain(discountStatus)
+        .range([0, x0.bandwidth()])
+        .padding(0.05);
+
+    const yMax = d3.max(items, item =>
+        d3.max(discountStatus, status => dataAgg.get(item)?.get(status) || 0)
+    );
+
+    const y = d3.scaleLinear()
+        .domain([0, yMax || 1])
+        .nice()
+        .range([innerHeight, 0]);
+
+    const color = d3.scaleOrdinal()
+        .domain(discountStatus)
+        .range(['#8b5cf6', '#9ca3af']); // Purple and gray
+
+    // Y Axis
+    svg.append("g")
+        .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s")));
+
+    // X Axis
+    svg.append("g")
+        .attr("transform", `translate(0, ${innerHeight})`)
+        .call(d3.axisBottom(x0))
+        .selectAll("text")
+        .attr("transform", "rotate(-45)")
+        .style("text-anchor", "end");
+
+    // Bars
+    const itemGroups = svg.selectAll(".item-group")
+        .data(items)
+        .enter()
+        .append("g")
+        .attr("class", "item-group")
+        .attr("transform", d => `translate(${x0(d)},0)`);
+
+    itemGroups.selectAll("rect")
+        .data(d =>
+            discountStatus.map(status => ({
+                key: status,
+                value: dataAgg.get(d)?.get(status) || 0,
+                item: d
+            }))
+        )
+        .enter()
+        .append("rect")
+        .attr("x", d => x1(d.key))
+        .attr("y", d => y(d.value))
+        .attr("width", x1.bandwidth())
+        .attr("height", d => innerHeight - y(d.value))
+        .attr("fill", d => color(d.key))
+        .on("mouseover", (event, d) => tooltip.style("opacity", 1))
+        .on("mousemove", (event, d) => {
+            tooltip.html(
+                `<strong>${d.item}</strong><br>Discount: ${d.key}<br>Revenue: ${d3.format("$,.0f")(d.value)}`
+            )
+                .style("left", event.pageX + 15 + "px")
+                .style("top", event.pageY - 28 + "px");
+        })
+        .on("mouseout", () => tooltip.style("opacity", 0));
+
+    // Legend
+    const legend = svg.selectAll(".legend")
+        .data(discountStatus)
+        .enter()
+        .append("g")
+        .attr("class", "legend")
+        .attr("transform", (d, i) => `translate(${innerWidth - 200 + i * 120}, ${-15})`);
+
+    legend.append("rect")
+        .attr("x", 0)
+        .attr("width", 12)
+        .attr("height", 12)
+        .style("fill", color);
+
+    legend.append("text")
+        .attr("x", 18)
+        .attr("y", 9)
+        .attr("dy", ".1em")
+        .style("text-anchor", "start")
+        .text(d => `Discount: ${d}`)
+        .attr("font-size", "12px");
+}
+
 
 });
 </script>
