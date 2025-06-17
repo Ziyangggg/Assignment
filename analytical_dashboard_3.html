@@ -325,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isDataLoaded) return;
         let filteredData = (season === 'All Year') ? fullData : fullData.filter(d => d.season === season);
         drawSubscriptionValueChart(fullData);
-        populateItemFilter(fullData);
+        populateItemFilter(filteredData);
         drawItemPurchasedChart(filteredData);
         drawDiscountChart(filteredData);
     }
