@@ -1082,12 +1082,13 @@ document.addEventListener('DOMContentLoaded', () => {
         svg.append("g")
             .call(d3.axisLeft(yScale).tickSize(0))
             .selectAll("text")
-            .style("font-size", "12px");
+            .style("font-size", "15px");
 
         // X Axis
         svg.append("g")
             .attr("transform", `translate(0, ${innerHeight})`)
-            .call(d3.axisBottom(xScale).ticks(5).tickFormat(d3.format("$,.0f")));
+            .call(d3.axisBottom(xScale).ticks(5).tickFormat(d3.format("$,.0f")))
+            .style("font-size", "15px");
 
         // Bars
         svg.selectAll(".bar")
@@ -1152,7 +1153,20 @@ document.addEventListener('DOMContentLoaded', () => {
         d => d.discount_applied
     );
 
-    const items = Array.from(dataAgg.keys()).sort(d3.ascending);
+    const totalByItem = Array.from(dataAgg, ([item, map]) => ({
+        item,
+        total: d3.sum(discountStatus.map(status => map.get(status) || 0))
+    }));
+
+    // Sort and get top 10
+    const top10Items = totalByItem
+        .sort((a, b) => d3.descending(a.total, b.total))
+        .slice(0, 10)
+        .map(d => d.item);
+
+    // Use only top 10 items
+    const items = top10Items.sort(d3.ascending);
+
 
     const x0 = d3.scaleBand()
         .domain(items)
@@ -1179,7 +1193,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Y Axis
     svg.append("g")
-        .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s")));
+        .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s")))
+        .style("font-size", "15px");
 
     // X Axis
     svg.append("g")
@@ -1187,7 +1202,8 @@ document.addEventListener('DOMContentLoaded', () => {
         .call(d3.axisBottom(x0))
         .selectAll("text")
         .attr("transform", "rotate(-45)")
-        .style("text-anchor", "end");
+        .style("text-anchor", "end")
+        .style("font-size", "15px");
 
     // Bars
     const itemGroups = svg.selectAll(".item-group")
