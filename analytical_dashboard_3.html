@@ -872,6 +872,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const arc = d3.arc().innerRadius(radius * 0.5).outerRadius(radius * 0.8);
 
+        const outerArc = d3.arc()
+            .innerRadius(radius * 0.95)
+            .outerRadius(radius * 0.95);
+
         svg.selectAll('path')
             .data(data_ready)
             .enter()
@@ -886,11 +890,24 @@ document.addEventListener('DOMContentLoaded', () => {
             .enter()
             .append("text")
             .attr("class", "label")
-            .attr("transform", d => `translate(${arc.centroid(d)})`)
-            .attr("text-anchor", "middle")
+            .attr("transform", d => `translate(${outerArc.centroid(d)})`)
+            .attr("text-anchor", d => (d.endAngle + d.startAngle) / 2 > Math.PI ? "end" : "start")
             .attr("font-size", "12px")
             .attr("fill", "#333")
             .text(d => `${d.data.key} (${d.data.value})`);
+
+        svg.selectAll("polyline")
+            .data(data_ready)
+            .enter()
+            .append("polyline")
+            .attr("points", d => {
+                const posA = arc.centroid(d);
+                const posB = outerArc.centroid(d);
+                return [posA, posB];
+            })
+            .style("fill", "none")
+            .style("stroke", "#999")
+            .style("stroke-width", "1px");
 
 
         svg.selectAll('path').data(data_ready).enter().append('path')
