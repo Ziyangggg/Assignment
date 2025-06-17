@@ -1015,17 +1015,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function populateItemFilter(data) {
         const select = d3.select("#itemFilter");
+
+        select.selectAll("option").remove();
+
         const items = Array.from(new Set(data.map(d => d.item_purchased))).sort();
+
         items.forEach(item => {
             select.append("option").attr("value", item).text(item);
         });
 
-        select.on("change", function () {
-            drawPaymentDonutChart(data, this.value);
+        select.on("change", null).on("change", function () {
+            const selectedItem = d3.select(this).property('value');
+            drawPaymentDonutChart(data, selectedItem);
         });
 
-        drawPaymentDonutChart(data, items[0]);
+        if (items.length > 0) {
+            drawPaymentDonutChart(data, items[0]);
+        }
     }
+
 
     function splitArray(arr, parts) {
         const result = Array.from({ length: parts }, () => []);
