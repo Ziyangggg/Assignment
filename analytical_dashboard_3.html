@@ -231,8 +231,8 @@
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div id="tactical-chart-payment-1"></div>
-                        <div id="tactical-chart-payment-2"></div>
+                        <div id="tactical-chart-payment-1" class="w-[370px]"></div>
+                        <div id="tactical-chart-payment-2" class="w-[370px]"></div>
                     </div>
                 </div>
 
@@ -1218,8 +1218,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const arc = d3.arc().innerRadius(radius * 0.5).outerRadius(radius * 0.8);
 
         const outerArc = d3.arc()
-            .innerRadius(radius * 0.76)
-            .outerRadius(radius * 0.76);
+            .innerRadius(radius * 0.85)
+            .outerRadius(radius * 0.85);
 
         svg.selectAll('path')
             .data(data_ready)
