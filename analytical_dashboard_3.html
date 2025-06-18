@@ -195,7 +195,7 @@
                 </div>
                 <div class="chart-container" style="height: 480;">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">US States Revenue Hex Map</h3>
-                    <p class="text-sm text-gray-500 mb-4">Darker color indicates higher revenue</p>
+                    <p class="text-sm text-gray-500 mb-4">Lighter color indicates higher revenue</p>
                     <div id="chart3-location-hexmap"></div>
                 </div>
                 <div class="chart-container">
@@ -645,7 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const color = d3.scaleOrdinal()
             .domain(discountStatus)
-            .range(['#3b82f6', '#9ca3af']);
+            .range(['#22c55e', '#ef4444']);
 
         // Y axis (sales count)
         svg.append("g")
@@ -744,7 +744,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Legend
         const legendItems = ['Discount: Yes', 'Discount: No'];
-        const legendColors = ['#3b82f6', '#9ca3af'];
+        const legendColors = ['#22c55e', '#ef4444'];
 
         const legend = svg.selectAll(".legend")
             .data(legendItems)
@@ -798,20 +798,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const color = d3.scaleSequential(d3.interpolatePlasma)
             .domain([0, revMax]);
+        
+        const ranking = Array.from(revByState.entries())
+            .sort((a, b) => d3.descending(a[1], b[1]));
 
         // --- DRAW HEXAGONS ---
         svg.selectAll("path")
             .data(hexGeo.features)
-            .join("path")   // <- join instead of .enter().append
+            .join("path")
             .attr("d", path)
             .attr("stroke", "#fff")
             .attr("stroke-width", 1)
+            .attr("fill", d => {
+                const abbr = d.properties.iso3166_2;
+                return color(revByState.get(abbr) || 0);
+            })
             .on("mouseover", (e, d) => {
                 const abbr = d.properties.iso3166_2;
                 const full = d.properties.google_name || d.properties.name;
                 const rev = revByState.get(abbr) || 0;
+                const rankIndex = ranking.findIndex(([abbr2]) => abbr2 === abbr) + 1;
+
                 tooltip.style("opacity",1)
-                    .html(`<strong>${full} (${abbr})</strong><br>Revenue: $${d3.format(",.0f")(rev)}`)
+                    .html(`<strong>${full} (${abbr})</strong><br>Revenue: $${d3.format(",.0f")(rev)}<br>Rank: #${rankIndex}`)
                     .style("left", (e.pageX+15)+"px")
                     .style("top", (e.pageY-28)+"px");
             })
@@ -889,35 +898,86 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function drawShippingChart(data) {
-        const container = d3.select("#chart4-shipping"); container.html("");
+        const container = d3.select("#chart4-shipping");
+        container.html("");
+
         const width = container.node().getBoundingClientRect().width;
         const height = 350;
-        const margin = { top: 30, right: 10, bottom: 80, left: 60 };
+        const margin = { top: 30, right: 10, bottom: 40, left: 60 };
         const innerWidth = width - margin.left - margin.right;
         const innerHeight = height - margin.top - margin.bottom;
-        const svg = container.append("svg").attr("width", width).attr("height", height).append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-        
+
+        const svg = container.append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
         const dataAgg = d3.rollup(data, v => v.length, d => d.shipping_type);
-        const chartData = Array.from(dataAgg, ([key, value]) => ({ type: key, count: value })).sort((a,b) => d3.descending(a.count, b.count));
-        
-        const xScale = d3.scaleBand().domain(chartData.map(d => d.type)).range([0, innerWidth]).padding(0.4);
-        const yScale = d3.scaleLinear().domain([0, d3.max(chartData, d => d.count) || 1]).nice().range([innerHeight, 0]);
+        const chartData = Array.from(dataAgg, ([key, value]) => ({ type: key, count: value }))
+            .sort((a, b) => d3.descending(a.count, b.count));
 
-        svg.append("g").call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("~s")));
-        svg.append("g").attr("transform", `translate(0, ${innerHeight})`).call(d3.axisBottom(xScale))
-            .selectAll("text").style("text-anchor", "end").attr("dx", "-.8em").attr("dy", ".15em").attr("transform", "rotate(-45)");
+        const xScale = d3.scaleBand()
+            .domain(chartData.map(d => d.type))
+            .range([0, innerWidth])
+            .padding(0.4);
 
-        svg.selectAll(".bar").data(chartData).enter().append("rect")
-            .attr("class", "bar").attr("x", d => xScale(d.type))
-            .attr("y", d => yScale(d.count)).attr("width", xScale.bandwidth())
-            .attr("height", d => innerHeight - yScale(d.count))
-            .attr("fill", "#60a5fa")
+        const yScale = d3.scaleLinear()
+            .domain([0, d3.max(chartData, d => d.count) || 1])
+            .nice()
+            .range([innerHeight, 0]);
+
+        const color = d3.scaleSequential()
+            .domain([chartData.length, 1])
+            .interpolator(t => d3.interpolateRgb("#fffde7", "#f9a825")(t));
+
+        svg.append("g")
+            .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format(",d")));
+
+        svg.append("g")
+            .attr("transform", `translate(0, ${innerHeight})`)
+            .call(d3.axisBottom(xScale))
+            .selectAll("text")
+            .style("text-anchor", "middle")   // center align
+            .attr("dx", "0")                  // no horizontal shift
+            .attr("dy", "1.2em")              // push text downward
+            .attr("transform", "rotate(0)");  // no rotation
+
+        // Bars with animation
+        svg.selectAll(".bar")
+            .data(chartData)
+            .enter()
+            .append("rect")
+            .attr("class", "bar")
+            .attr("x", d => xScale(d.type))
+            .attr("y", innerHeight)
+            .attr("width", xScale.bandwidth())
+            .attr("height", 0)
+            .attr("fill", (d, i) => color(i + 1))
             .on("mouseover", (event, d) => tooltip.style("opacity", 1))
             .on("mousemove", (event, d) => {
                 tooltip.html(`<strong>${d.type}</strong><br>Orders: ${formatNumber(d.count)}`)
-                    .style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
+                    .style("left", (event.pageX + 15) + "px")
+                    .style("top", (event.pageY - 28) + "px");
             })
-            .on("mouseout", () => tooltip.style("opacity", 0));
+            .on("mouseout", () => tooltip.style("opacity", 0))
+            .transition()
+            .duration(800)
+            .attr("y", d => yScale(d.count))
+            .attr("height", d => innerHeight - yScale(d.count));
+
+        // Labels on top
+        svg.selectAll(".bar-label")
+            .data(chartData)
+            .enter()
+            .append("text")
+            .attr("class", "bar-label")
+            .attr("x", d => xScale(d.type) + xScale.bandwidth() / 2)
+            .attr("y", d => yScale(d.count) - 5)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "11px")
+            .attr("fill", "#333")
+            .text(d => formatNumber(d.count));
     }
     
     // --- TACTICAL CHARTS ---
