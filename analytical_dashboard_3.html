@@ -137,8 +137,8 @@
     <!-- Navigation -->
     <nav class="mb-2 border-b border-gray-200">
         <div class="flex space-x-8">
-            <button id="tab-analytical" class="nav-tab py-3 px-1 text-gray-600 hover:text-gray-800 active">Analytical Dashboard</button>
-            <button id="tab-tactical" class="nav-tab py-3 px-1 text-gray-600 hover:text-gray-800">Tactical Dashboard</button>
+            <button id="tab-analytical" class="nav-tab py-3 px-1 text-sm text-gray-600 hover:text-gray-800 active">Revenue & Sales Trends Across Product Categories</button>
+            <button id="tab-tactical" class="nav-tab py-3 px-1 text-sm text-gray-600 hover:text-gray-800">Product-Level Performance</button>
         </div>
     </nav>
 
@@ -146,16 +146,6 @@
     <main>
         <!-- ANALYTICAL DASHBOARD -->
         <div id="analytical-dashboard">
-            <!-- <div class="mb-8">
-                <p class="text-sm font-semibold text-gray-700 mb-2">FILTER BY SEASON</p>
-                <div id="season-filters" class="flex flex-wrap gap-3">
-                    <button class="filter-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm hover:bg-gray-100 active" data-season="All Year">All Year</button>
-                    <button class="filter-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm hover:bg-gray-100" data-season="Winter">Winter</button>
-                    <button class="filter-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm hover:bg-gray-100" data-season="Spring">Spring</button>
-                    <button class="filter-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm hover:bg-gray-100" data-season="Summer">Summer</button>
-                    <button class="filter-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm hover:bg-gray-100" data-season="Fall">Fall</button>
-                </div>
-            </div> -->
             <div class="chart-container mb-3">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-gray-200 gap-2">
                     <div class="kpi-card px-2 py-1">
@@ -176,18 +166,12 @@
                     </div>
                 </div>
             </div>
-            <!-- <div class="chart-container mb-8">
-                <h3 class="text-lg font-semibold text-gray-800 mb-1">Top 10 Selling Products</h3>
-                <p class="text-sm text-gray-500 mb-4">Highest revenue-generating items for the selected period.</p>
-                <div id="chart-top-products"></div>
-            </div> -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div class="chart-container"><h3 class="text-lg font-semibold text-gray-800 mb-1">Category Performance Across Seasons</h3><p class="text-sm text-gray-500 mb-4">Total revenue by category over the year.</p><div id="chart1-line-chart"></div></div>
-                <!-- <div class="chart-container">
-                    <h3 id="category-performance-title" class="text-lg font-semibold text-gray-800 mb-1">Total Revenue by Season</h3>
-                    <p id="category-performance-subtitle" class="text-sm text-gray-500 mb-4">An overview of total sales across all seasons.</p>
-                    <div id="chart1-category-performance"></div>
-                </div> -->
+                <div class="chart-container">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Revenue Trends by Category</h3>
+                    <p class="text-sm text-gray-500 mb-4">Seasonal trends and distribution of revenue across product categories.</p>
+                    <div id="chart1-line-chart"></div>
+                </div>
                 <div class="chart-container" style = "height: 410px;">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">Sales Impact of Discounts Across Product Categories</h3>
                     <p class="text-sm text-gray-500 mb-2">Analyzing Sales Count and Revenue of Discounted vs. Non-Discounted Items.</p>
@@ -265,6 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeTab = 'analytical';  // default
     let hexGeo = null;  // store globally
     let selectedState = "All";  // Default: no state selected
+    let selectedCategory = 'All';  // or null
+    let selectedDiscount = null;  // or null
 
     const tooltip = d3.select("#tooltip");
     
@@ -291,7 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryFilter.classList.add('hidden');
 
         if (isDataLoaded) {
-            updateAnalyticalDashboard(currentSeason, hexGeo, selectedState);
+            updateAnalyticalDashboard(currentSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
         }
     });
 
@@ -327,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fullData = data;
         hexGeo = hexGeoLoaded;
         isDataLoaded = true;
-        updateAnalyticalDashboard(currentSeason, hexGeo, selectedState);
+        updateAnalyticalDashboard(currentSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
     })
     .catch(error => {
         console.error("Error loading the data:", error);
@@ -346,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentSeason = selectedSeason;
 
         if (activeTab === 'analytical') {
-            updateAnalyticalDashboard(currentSeason, hexGeo, selectedState);
+            updateAnalyticalDashboard(currentSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
         } else if (activeTab === 'tactical') {
             drawTacticalDashboard(currentSeason, currentCategory);
         }
@@ -366,24 +352,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         
     // --- DASHBOARD UPDATE FUNCTIONS ---
-    function updateAnalyticalDashboard(season, hexGeo, selectedState) {
+    function updateAnalyticalDashboard(season, hexGeo, selectedState, selectedCategory, selectedDiscount) {
         if (!isDataLoaded) return;
 
         let filteredData = fullData;
 
-        // Filter by season
         if (season !== 'All Year') {
             filteredData = filteredData.filter(d => d.season === season);
         }
 
-        // Filter by state
         if (selectedState && selectedState !== 'All') {
             filteredData = filteredData.filter(d => d.state_abbr === selectedState);
         }
 
+        if (selectedCategory && selectedCategory !== 'All') {
+            filteredData = filteredData.filter(d => d.category === selectedCategory);
+        }
+
+        if (selectedDiscount && selectedDiscount !== 'All') {
+            filteredData = filteredData.filter(d => (d.discount_applied === selectedDiscount));
+        }
+
         updateKPIs(filteredData);
-        drawLineChart(filteredData, season);
-        drawGroupedBarSalesCountRevenue(filteredData);
+        drawLineChart(filteredData, season, hexGeo, selectedState, selectedCategory);
+        drawGroupedBarSalesCountRevenue(filteredData, selectedDiscount);
         drawHexMap(filteredData, season, hexGeo);
         drawShippingChart(filteredData);
     }
@@ -460,16 +452,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- ANALYTICAL CHARTS ---
     
-    function drawLineChart(data, selectedSeason) {
+    function drawLineChart(data, selectedSeason, hexGeo, selectedState, selectedCategory){
         const container = d3.select("#chart1-line-chart");
         container.html("");
 
-        // Set max width
         const width = container.node().getBoundingClientRect().width;
         const height = 300;
-
         const margin = { top: 10, right: 20, bottom: 50, left: 50 };
-        const innerWidth = width - margin.left - margin.right - 30;
+        const innerWidth = width - margin.left - margin.right;
         const innerHeight = height - margin.top - margin.bottom;
 
         const svg = container
@@ -481,6 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const seasonsOrder = ['Spring', 'Summer', 'Fall', 'Winter'];
 
+        // Aggregate data
         const dataAgg = d3.rollup(
             data,
             v => d3.sum(v, d => d.purchase_amount_usd),
@@ -488,119 +479,261 @@ document.addEventListener('DOMContentLoaded', () => {
             d => d.season
         );
 
-        const dataByCat = Array.from(dataAgg, ([category, seasonMap]) => ({
-            category,
-            values: seasonsOrder.map(season => ({
-                season,
-                revenue: seasonMap.get(season) || 0
-            }))
-        }));
+        const fixedCategories = ['Clothing', 'Footwear', 'Outerwear', 'Accessories'];
 
-        const xScale = d3.scalePoint()
-            .domain(seasonsOrder)
-            .range([0, innerWidth]);
+        const colorScale = d3.scaleOrdinal()
+            .domain(fixedCategories)
+            .range(['#4e79a7', '#f28e2b', '#e15759', '#76b7b2']);
 
-        const yScale = d3.scaleLinear()
-            .domain([0, d3.max(dataByCat, d => d3.max(d.values, v => v.revenue)) || 1])
-            .nice()
-            .range([innerHeight, 0]);
+        // CASE 1: All Year → Line chart
+        if (selectedSeason === "All Year") {
+            const dataByCat = Array.from(dataAgg, ([category, seasonMap]) => ({
+                category,
+                values: seasonsOrder.map(season => ({
+                    season,
+                    revenue: seasonMap.get(season) || 0
+                }))
+            }));
 
-        const colorScale = d3.scaleOrdinal(d3.schemeCategory10)
-            .domain(dataByCat.map(d => d.category));
+            const xScale = d3.scalePoint()
+                .domain(seasonsOrder)
+                .range([0, innerWidth]);
 
-        // Axes
-        svg.append("g")
-            .attr("transform", `translate(0, ${innerHeight})`)
-            .call(d3.axisBottom(xScale))
-            .style("font-size", "12px");
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(dataByCat, d => d3.max(d.values, v => v.revenue)) || 1])
+                .nice()
+                .range([innerHeight, 0]);
 
-        svg.append("g")
-            .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("~s")))
-            .style("font-size", "12px");
+            // Axes
+            svg.append("g")
+                .attr("transform", `translate(0, ${innerHeight})`)
+                .call(d3.axisBottom(xScale))
+                .style("font-size", "13px")
+                .style("font-weight", "bold");
 
-        // Line generator
-        const line = d3.line()
-            .x(d => xScale(d.season))
-            .y(d => yScale(d.revenue));
+            svg.append("g")
+                .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("~s")))
+                .style("font-size", "13px")
+                .style("font-weight", "bold");
 
-        // Draw lines
-        svg.selectAll(".line")
-            .data(dataByCat)
-            .enter()
-            .append("path")
-            .attr("class", "line")
-            .attr("d", d => line(d.values))
-            .style("stroke", d => colorScale(d.category))
-            .style("fill", "none")
-            .style("stroke-width", 2)
-            .each(function () {
-                const path = d3.select(this);
-                const totalLength = this.getTotalLength();
-                path
-                    .attr("stroke-dasharray", totalLength + " " + totalLength)
-                    .attr("stroke-dashoffset", totalLength)
-                    .transition()
-                    .duration(700)
-                    .ease(d3.easeLinear)
-                    .attr("stroke-dashoffset", 0);
-            });
+            // Line generator
+            const line = d3.line()
+                .x(d => xScale(d.season))
+                .y(d => yScale(d.revenue));
 
-        // Draw dots
-        const dots = svg.selectAll(".dots")
-            .data(dataByCat)
-            .enter()
-            .append("g")
-            .attr("class", "dots")
-            .style("fill", d => colorScale(d.category));
+            // Draw lines
+            svg.selectAll(".line")
+                .data(dataByCat)
+                .enter()
+                .append("path")
+                .attr("class", "line")
+                .attr("d", d => line(d.values))
+                .style("stroke", d => colorScale(d.category))
+                .style("fill", "none")
+                .style("stroke-width", 2)
+                .each(function () {
+                    const path = d3.select(this);
+                    const totalLength = this.getTotalLength();
+                    path
+                        .attr("stroke-dasharray", totalLength + " " + totalLength)
+                        .attr("stroke-dashoffset", totalLength)
+                        .transition()
+                        .duration(700)
+                        .ease(d3.easeLinear)
+                        .attr("stroke-dashoffset", 0);
+                })
+                .on("click", (event, d) => {
+                    selectedCategory = (selectedCategory === d.category) ? 'All' : d.category;
+                    updateAnalyticalDashboard(selectedSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
+                });
 
-        // Append circles with delayed fade-in
-        dots.selectAll(".dot")
-            .data(d => d.values.map(v => ({ ...v, category: d.category })))
-            .enter()
-            .append("circle")
-            .attr("class", "line-chart-dot")
-            .attr("cx", d => xScale(d.season))
-            .attr("cy", d => yScale(d.revenue))
-            .attr("r", 5)
-            .style("opacity", 0)  // start hidden
-            .transition()
-            .delay(700)          // wait until line animation ends
-            .duration(500)
-            .style("opacity", 1)
-            .selection()          // return selection for chaining below
-            .classed("highlight-dot", d => d.season === selectedSeason);
+            // Dots
+            const dots = svg.selectAll(".dots")
+                .data(dataByCat)
+                .enter()
+                .append("g")
+                .attr("class", "dots")
+                .style("fill", d => colorScale(d.category));
 
-        // Tooltip
-        dots.selectAll(".line-chart-dot")
-            .on("mouseover", (event, d) => tooltip.style("opacity", 1))
-            .on("mousemove", (event, d) => {
-                tooltip
-                    .html(`<strong>${d.category} - ${d.season}</strong><br>Revenue: ${d3.format("$,.0f")(d.revenue)}`)
-                    .style("left", (event.pageX + 15) + "px")
-                    .style("top", (event.pageY - 28) + "px");
-            })
-            .on("mouseout", () => tooltip.style("opacity", 0));
+            dots.selectAll(".dot")
+                .data(d => d.values.map(v => ({ ...v, category: d.category })))
+                .enter()
+                .append("circle")
+                .attr("class", "line-chart-dot")
+                .attr("cx", d => xScale(d.season))
+                .attr("cy", d => yScale(d.revenue))
+                .attr("r", 5)
+                .style("opacity", 0)
+                .transition()
+                .delay(700)
+                .duration(500)
+                .style("opacity", 1);
 
-        const legend = svg.selectAll(".legend")
-            .data(colorScale.domain())
-            .enter()
-            .append("g")
-            .attr("class", "legend-item")
-            .attr("transform", (d, i) => `translate(${i * 130}, ${innerHeight + 40})`);  // <-- one row
+            // Tooltip
+            dots.selectAll(".line-chart-dot")
+                .on("mouseover", (event, d) => tooltip.style("opacity", 1))
+                .on("mousemove", (event, d) => {
+                    tooltip
+                        .html(`<strong>${d.category} - ${d.season}</strong><br>Revenue: ${d3.format("$,.0f")(d.revenue)}`)
+                        .style("left", (event.pageX + 15) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", () => tooltip.style("opacity", 0));
 
-        legend.append("rect")
-            .attr("width", 10)
-            .attr("height", 10)
-            .style("fill", colorScale);
+            // Legend
+            const legend = svg.selectAll(".legend")
+                .data(colorScale.domain())
+                .enter()
+                .append("g")
+                .attr("class", "legend-item")
+                .attr("transform", (d, i) => `translate(${i * 130}, ${innerHeight + 40})`)
+                .style("cursor", "pointer") // <-- show hand cursor
+                .on("click", (event, d) => {
+                    selectedCategory = (selectedCategory === d) ? 'All' : d;
+                    updateAnalyticalDashboard(selectedSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
+                });
 
-        legend.append("text")
-            .attr("x", 15)  // small space to the right of the box
-            .attr("y", 8)
-            .style("font-size", "12px")
-            .text(d => d);
+            legend.append("rect")
+                .attr("width", 10)
+                .attr("height", 10)
+                .style("fill", colorScale);
+
+            legend.append("text")
+                .attr("x", 15)
+                .attr("y", 8)
+                .style("font-size", "12px")
+                .text(d => d);
+
+        } else {
+            // CASE 2: Selected Season → Donut chart with total in center
+            const pieData = Array.from(dataAgg, ([category, seasonMap]) => ({
+                category,
+                revenue: seasonMap.get(selectedSeason) || 0
+            })).filter(d => d.revenue > 0);
+
+            const totalRevenue = d3.sum(pieData, d => d.revenue);
+
+            // PIE + ARC (donut)
+            const pie = d3.pie()
+                .sort(null)
+                .value(d => d.revenue);
+
+            const radius = Math.min(innerWidth, innerHeight) / 2 * 0.96;
+
+            const arc = d3.arc()
+                .innerRadius(radius * 0.5)   // make donut
+                .outerRadius(radius);
+
+            const outerArc = d3.arc()
+                .innerRadius(radius * 1.05)
+                .outerRadius(radius * 1.05);
+
+            const g = svg.append("g")
+                .attr("transform", `translate(${width/2}, ${height/2 - 30})`);
+
+            const arcs = g.selectAll(".arc")
+                .data(pie(pieData))
+                .enter()
+                .append("g")
+                .attr("class", "arc");
+
+            arcs.append("path")
+                .attr("d", arc)
+                .attr("fill", d => colorScale(d.data.category))
+                .transition()
+                .duration(700)
+                .attrTween("d", function(d) {
+                    const i = d3.interpolate(d.startAngle, d.endAngle);
+                    return function(t) {
+                        d.endAngle = i(t);
+                        return arc(d);
+                    };
+                });
+
+            // OUTSIDE LINES
+            arcs.append("polyline")
+                .attr("stroke", "#555")
+                .attr("stroke-width", 1)
+                .attr("fill", "none")
+                .attr("points", d => {
+                    const pos = outerArc.centroid(d);
+                    const midangle = (d.startAngle + d.endAngle) / 2;
+                    pos[0] = (midangle < Math.PI ? 1 : -1) * (Math.min(innerWidth, innerHeight) / 2 - 10);
+                    return [arc.centroid(d), outerArc.centroid(d), pos];
+                });
+
+            // OUTSIDE LABELS (bold, percent, revenue)
+            arcs.append("text")
+                .attr("text-anchor", d => {
+                    const midangle = (d.startAngle + d.endAngle) / 2;
+                    return (midangle < Math.PI) ? "start" : "end";
+                })
+                .attr("font-size", "12px")
+                .attr("font-weight", "bold")
+                .attr("transform", d => {
+                    const pos = outerArc.centroid(d);
+                    const midangle = (d.startAngle + d.endAngle) / 2;
+                    pos[0] = (midangle < Math.PI ? 1 : -1) * (Math.min(innerWidth, innerHeight) / 2 + 10);
+                    return `translate(${pos})`;
+                })
+                .text(d => {
+                    const pct = (d.data.revenue / totalRevenue * 100).toFixed(1);
+                    return `${d.data.category} • ${pct}% • $${d3.format(",.0f")(d.data.revenue)}`;
+                });
+
+            // TOOLTIP
+            arcs.selectAll("path")
+                .on("mouseover", (event, d) => tooltip.style("opacity", 1))
+                .on("mousemove", (event, d) => {
+                    const pct = (d.data.revenue / totalRevenue * 100).toFixed(1);
+                    tooltip
+                        .html(`<strong>${d.data.category}</strong><br>Revenue: $${d3.format(",.0f")(d.data.revenue)}<br>${pct}% of total`)
+                        .style("left", (event.pageX + 15) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", () => tooltip.style("opacity", 0))
+                .on("click", (event, d) => {
+                    selectedCategory = (selectedCategory === d.data.category) ? 'All' : d.data.category;
+                    updateAnalyticalDashboard(selectedSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
+                });
+
+            // Add total revenue in donut hole
+            svg.append("text")
+                .attr("x", width/2)
+                .attr("y", height/2 - 30)
+                .attr("text-anchor", "middle")
+                .attr("font-size", "16px")
+                .attr("font-weight", "bold")
+                .attr("fill", "#333")
+                .text(`$${d3.format(",.0f")(totalRevenue)}`);
+
+            // Legend
+            const legend = svg.selectAll(".legend")
+                .data(colorScale.domain())
+                .enter()
+                .append("g")
+                .attr("class", "legend-item")
+                .attr("transform", (d, i) => `translate(${i * 130}, ${innerHeight + 40})`)
+                .style("cursor", "pointer")
+                .on("click", (event, d) => {
+                    selectedCategory = (selectedCategory === d) ? 'All' : d;
+                    updateAnalyticalDashboard(selectedSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
+                });
+
+            legend.append("rect")
+                .attr("width", 10)
+                .attr("height", 10)
+                .style("fill", colorScale);
+
+            legend.append("text")
+                .attr("x", 15)
+                .attr("y", 8)
+                .style("font-size", "12px")
+                .text(d => d);
+        }
     }
 
-    function drawGroupedBarSalesCountRevenue(data) {
+    function drawGroupedBarSalesCountRevenue(data, selectedDiscount) {
         const container = d3.select("#chart2-grouped-bar");
         container.html("");
 
@@ -617,20 +750,24 @@ document.addEventListener('DOMContentLoaded', () => {
             .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
 
-        const categories = [...new Set(data.map(d => d.category))].sort(d3.ascending);
         const discountStatus = ['Yes', 'No'];
+        const filteredData = (selectedDiscount && selectedDiscount !== 'All')
+            ? data.filter(d => d.discount_applied === selectedDiscount)
+            : data;
 
-        // Count of sales
+        const categories = [...new Set(filteredData.map(d => d.category))].sort(d3.ascending);
+
+        // Aggregate count
         const countAgg = d3.rollup(
-            data,
+            filteredData,
             v => v.length,
             d => d.category,
             d => d.discount_applied
         );
 
-        // Revenue sum
+        // Aggregate revenue
         const revenueAgg = d3.rollup(
-            data,
+            filteredData,
             v => d3.sum(v, d => d.purchase_amount_usd),
             d => d.category,
             d => d.discount_applied
@@ -659,10 +796,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .domain(discountStatus)
             .range(['#22c55e', '#ef4444']);
 
-        // Y axis (sales count)
+        // Y axis
         svg.append("g")
             .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s")))
-            .style("font-size", "12px");;
+            .style("font-size", "12px")
+            .style("font-weight", "bold");
 
         // X axis
         svg.append("g")
@@ -670,7 +808,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .call(d3.axisBottom(x0))
             .selectAll("text")
             .style("text-anchor", "center")
-            .style("font-size", "12px");
+            .style("font-size", "12px")
+            .style("font-weight", "bold");
 
         // Bars
         const categoryGroup = svg.selectAll(".category-group")
@@ -696,9 +835,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .enter()
             .append("rect")
             .attr("x", d => x1(d.key))
-            .attr("y", d => y(0))  // start from bottom (y=0)
+            .attr("y", d => y(0))
             .attr("width", x1.bandwidth())
-            .attr("height", 0) // start from height=0
+            .attr("height", 0)
             .attr("fill", d => color(d.key))
             .on("mouseover", (event, d) => tooltip.style("opacity", 1))
             .on("mousemove", (event, d) => {
@@ -763,7 +902,14 @@ document.addEventListener('DOMContentLoaded', () => {
             .enter()
             .append("g")
             .attr("class", "legend")
-            .attr("transform", (d, i) => `translate(${innerWidth - 220 + i * 120}, ${-15})`);
+            .attr("transform", (d, i) => `translate(${innerWidth - 180 + i * 100}, ${-30})`)
+            .style("cursor", "pointer")
+            .on("click", (event, d) => {
+                const clickedDiscount = (d.includes('Yes')) ? 'Yes' : 'No';
+                selectedDiscount = (selectedDiscount === clickedDiscount) ? null : clickedDiscount;
+
+                updateAnalyticalDashboard(currentSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
+            });
 
         legend.append("rect")
             .attr("x", 0)
@@ -840,7 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .on("click", (e, d) => {
                 const stateAbbr = d.properties.iso3166_2;
                 selectedState = (selectedState === stateAbbr) ? "All" : stateAbbr;   // toggle
-                updateAnalyticalDashboard(currentSeason, hexGeo, selectedState);
+                updateAnalyticalDashboard(currentSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
             })
             .transition()
             .duration(1000)
@@ -949,7 +1095,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .interpolator(t => d3.interpolateRgb("#fffde7", "#f9a825")(t));
 
         svg.append("g")
-            .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format(",d")));
+            .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format(",d")))
+            .style("font-size", "12px")
+            .style("font-weight", "bold");
 
         svg.append("g")
             .attr("transform", `translate(0, ${innerHeight})`)
@@ -958,7 +1106,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .style("text-anchor", "middle")   // center align
             .attr("dx", "0")                  // no horizontal shift
             .attr("dy", "1.2em")              // push text downward
-            .attr("transform", "rotate(0)");  // no rotation
+            .attr("transform", "rotate(0)")  // no rotation
+            .style("font-size", "12px")
+            .style("font-weight", "bold");
 
         // Bars with animation
         svg.selectAll(".bar")
