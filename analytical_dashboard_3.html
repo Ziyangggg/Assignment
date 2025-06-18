@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3-hexbin.v0.2.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -192,10 +193,10 @@
                     <p class="text-sm text-gray-500 mb-2">Analyzing Sales Count and Revenue of Discounted vs. Non-Discounted Items.</p>
                     <div id="chart2-grouped-bar"></div>
                 </div>
-                <div class="chart-container">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Revenue by Location</h3>
-                    <p class="text-sm text-gray-500 mb-4">Top revenue states</p>
-                    <div id="chart3-location"></div>
+                <div class="chart-container" style="height: 480;">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">US States Revenue Hex Map</h3>
+                    <p class="text-sm text-gray-500 mb-4">Darker color indicates higher revenue</p>
+                    <div id="chart3-location-hexmap"></div>
                 </div>
                 <div class="chart-container">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">Shipping Method Popularity</h3>
@@ -261,6 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentCategory = 'All';
     let isDataLoaded = false;
     let isTacticalDrawn = false; // Flag to draw tactical charts only once
+    let activeTab = 'analytical';  // default
+    let hexGeo = null;  // store globally
 
     const tooltip = d3.select("#tooltip");
     
@@ -277,27 +280,27 @@ document.addEventListener('DOMContentLoaded', () => {
     categoryFilter.classList.add('hidden');
 
     analyticalTab.addEventListener('click', () => {
+        activeTab = 'analytical';  // set flag
         analyticalTab.classList.add('active');
         tacticalTab.classList.remove('active');
         analyticalDashboard.classList.remove('hidden');
         tacticalDashboard.classList.add('hidden');
 
-        // SHOW only season filter
         seasonFilter.classList.remove('hidden');
         categoryFilter.classList.add('hidden');
 
         if (isDataLoaded) {
-            updateAnalyticalDashboard(currentSeason);
+            updateAnalyticalDashboard(currentSeason, hexGeo);
         }
     });
 
     tacticalTab.addEventListener('click', () => {
+        activeTab = 'tactical';  // set flag
         tacticalTab.classList.add('active');
         analyticalTab.classList.remove('active');
         tacticalDashboard.classList.remove('hidden');
         analyticalDashboard.classList.add('hidden');
 
-        // SHOW both filters
         seasonFilter.classList.remove('hidden');
         categoryFilter.classList.remove('hidden');
 
@@ -315,13 +318,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const formatAOV = (d) => d3.format("$,.2f")(d);
     const formatRating = (d) => d3.format(".2f")(d);
 
-    d3.csv(dataUrl, d3.autoType)
-    .then(data => {
+    Promise.all([
+        d3.csv(dataUrl, d3.autoType),
+        d3.json("us_states_hexgrid.geojson")
+    ])
+    .then(([data, hexGeoLoaded]) => {
         fullData = data;
+        hexGeo = hexGeoLoaded;
         isDataLoaded = true;
-
-        // Update dashboard
-        updateAnalyticalDashboard(currentSeason);
+        updateAnalyticalDashboard(currentSeason, hexGeo);
     })
     .catch(error => {
         console.error("Error loading the data:", error);
@@ -338,34 +343,46 @@ document.addEventListener('DOMContentLoaded', () => {
     .on('change', function () {
         const selectedSeason = d3.select(this).property('value');
         currentSeason = selectedSeason;
-        updateAnalyticalDashboard(currentSeason);
-        drawTacticalDashboard(currentSeason, currentCategory);
+
+        if (activeTab === 'analytical') {
+            updateAnalyticalDashboard(currentSeason, hexGeo);
+        } else if (activeTab === 'tactical') {
+            drawTacticalDashboard(currentSeason, currentCategory);
+        }
     });
 
+    // CATEGORY SELECT
     d3.select('#category-select')
     .on('change', function () {
         const selectedCategory = d3.select(this).property('value');
         currentCategory = selectedCategory;
-        drawTacticalDashboard(currentSeason, currentCategory);
+
+        // Only tactical dashboard uses category
+        if (activeTab === 'tactical') {
+            drawTacticalDashboard(currentSeason, currentCategory);
+        }
     });
+
         
     // --- DASHBOARD UPDATE FUNCTIONS ---
-    function updateAnalyticalDashboard(season) {
+    function updateAnalyticalDashboard(season, hexGeo) {
         if (!isDataLoaded) return;
-        let filteredData = (season === 'All Year') ? fullData : fullData.filter(d => d.season === season);
+        const filteredData = (season === 'All Year') ? fullData : fullData.filter(d => d.season === season);
+
         updateKPIs(filteredData);
         drawLineChart(fullData, season);
         drawGroupedBarSalesCountRevenue(filteredData);
-        drawLocationChart(fullData, season);
+        drawHexMap(fullData, season, hexGeo);
         drawShippingChart(filteredData);
     }
-    
+
     function drawTacticalDashboard(season, category) {
         if (!isDataLoaded) return;
         const filteredData = fullData.filter(d =>
             (season === 'All Year' || d.season === season) &&
             (category === 'All' || d.category === category)
         );
+
         drawSubscriptionValueChart(fullData);
         populateItemFilter(filteredData);
         drawItemPurchasedChart(filteredData);
@@ -751,77 +768,125 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("font-size", "12px");
     }
 
-    function drawLocationChart(data, selectedSeason) {
-        const container = d3.select("#chart3-location");
+    function drawHexMap(data, selectedSeason, hexGeo) {
+        const container = d3.select("#chart3-location-hexmap");
         container.html("");
 
-        const width = container.node().getBoundingClientRect().width;
-        const height = 350;
-        const margin = { top: 20, right: 30, bottom: 40, left: 120 };
-        const innerWidth = width - margin.left - margin.right;
-        const innerHeight = height - margin.top - margin.bottom;
+        const scale = 0.95;
+
+        const maxWidth = 700;
+        const width = Math.min(container.node().getBoundingClientRect().width, maxWidth) * scale;
+        const height = 300;
 
         const svg = container.append("svg")
             .attr("width", width)
-            .attr("height", height)
-            .append("g")
-            .attr("transform", `translate(${margin.left},${margin.top})`);
+            .attr("height", height + 50);  // Extra space for legend
 
-        // 🚀 Filter by season
-        const filteredData = (selectedSeason === 'All Year')
+        const projection = d3.geoIdentity()
+            .reflectY(true)
+            .fitSize([width, height], hexGeo);
+
+        const path = d3.geoPath(projection);
+
+        const filtered = selectedSeason === "All Year"
             ? data
             : data.filter(d => d.season === selectedSeason);
 
-        const dataAgg = d3.rollup(
-            filteredData,
-            v => d3.sum(v, d => d.purchase_amount_usd),
-            d => d.location
-        );
+        const revByState = d3.rollup(filtered, v => d3.sum(v, d => d.purchase_amount_usd), d => d.state_abbr);
 
-        const chartData = Array.from(dataAgg, ([key, value]) => ({ location: key, revenue: value }))
-            .sort((a, b) => d3.descending(a.revenue, b.revenue))
-            .slice(0, 15); // Top 15
+        const revMax = d3.max([...revByState.values()]) || 1;
 
-        const xScale = d3.scaleLinear()
-            .domain([0, d3.max(chartData, d => d.revenue) || 1])
-            .nice()
-            .range([0, innerWidth]);
+        const color = d3.scaleSequential(d3.interpolatePlasma)
+            .domain([0, revMax]);
 
-        const yScale = d3.scaleBand()
-            .domain(chartData.map(d => d.location))
-            .range([0, innerHeight])
-            .padding(0.1);
-
-        svg.append("g")
-            .call(d3.axisLeft(yScale).tickSize(0))
-            .select(".domain").remove();
-
-        svg.append("g")
-            .attr("transform", `translate(0, ${innerHeight})`)
-            .call(d3.axisBottom(xScale).ticks(5).tickFormat(d3.format("~s")));
-
-        svg.selectAll(".bar")
-            .data(chartData)
-            .enter()
-            .append("rect")
-            .attr("class", "bar")
-            .attr("y", d => yScale(d.location))
-            .attr("x", 0)
-            .attr("height", yScale.bandwidth())
-            .attr("width", 0)
-            .style("fill", "#60a5fa")
-            .on("mouseover", (event, d) => tooltip.style("opacity", 1))
-            .on("mousemove", (event, d) => {
-                tooltip.html(`<strong>${d.location}</strong><br>Revenue: ${d3.format("$,.0f")(d.revenue)}`)
-                    .style("left", (event.pageX + 15) + "px")
-                    .style("top", (event.pageY - 28) + "px");
+        // --- DRAW HEXAGONS ---
+        svg.selectAll("path")
+            .data(hexGeo.features)
+            .join("path")   // <- join instead of .enter().append
+            .attr("d", path)
+            .attr("stroke", "#fff")
+            .attr("stroke-width", 1)
+            .on("mouseover", (e, d) => {
+                const abbr = d.properties.iso3166_2;
+                const full = d.properties.google_name || d.properties.name;
+                const rev = revByState.get(abbr) || 0;
+                tooltip.style("opacity",1)
+                    .html(`<strong>${full} (${abbr})</strong><br>Revenue: $${d3.format(",.0f")(rev)}`)
+                    .style("left", (e.pageX+15)+"px")
+                    .style("top", (e.pageY-28)+"px");
             })
-            .on("mouseout", () => tooltip.style("opacity", 0))
+            .on("mouseout", () => tooltip.style("opacity",0))
             .transition()
-            .duration(800)
-            .attr("width", d => xScale(d.revenue));
-    }
+            .duration(1000)
+            .attr("fill", d => {
+                const abbr = d.properties.iso3166_2;
+                return color(revByState.get(abbr) || 0);
+            });
 
+        // --- STATE ABBR LABEL ---
+        svg.selectAll("text")
+            .data(hexGeo.features)
+            .enter()
+            .append("text")
+            .attr("transform", d => `translate(${path.centroid(d)})`)
+            .attr("text-anchor", "middle")
+            .attr("dy", "0.35em")
+            .attr("font-size", "10px")
+            .attr("pointer-events", "none")
+            .text(d => d.properties.iso3166_2);
+
+        // --- ADD LEGEND ---
+        const legendWidth = 200;
+        const legendHeight = 10;
+        const legendMarginTop = height + 20;
+
+        const legendScale = d3.scaleLinear()
+            .domain([0, revMax])
+            .range([0, legendWidth])
+            .nice();
+
+        const legendAxis = d3.axisBottom(legendScale)
+            .ticks(4)
+            .tickFormat(d3.format("$.2s"));
+
+        const legendGroup = svg.append("g")
+            .attr("transform", `translate(${(width - legendWidth) - 40}, ${legendMarginTop})`);
+
+        // Gradient
+        const defs = svg.append("defs");
+
+        const linearGradient = defs.append("linearGradient")
+            .attr("id", "legend-gradient");
+
+        linearGradient.selectAll("stop")
+            .data(d3.range(0, 1.01, 0.01))
+            .enter()
+            .append("stop")
+            .attr("offset", d => `${d * 100}%`)
+            .attr("stop-color", d => color(d * revMax));
+
+        // Draw gradient rect
+        legendGroup.append("rect")
+            .attr("width", legendWidth)
+            .attr("height", legendHeight)
+            .style("fill", "url(#legend-gradient)");
+
+        // Draw legend axis
+        legendGroup.append("g")
+            .attr("transform", `translate(0, ${legendHeight})`)
+            .call(legendAxis)
+            .selectAll("text")
+            .attr("font-size", "10px");
+
+        // Legend title
+        legendGroup.append("text")
+            .attr("x", legendWidth / 2)
+            .attr("y", -6)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "11px")
+            .attr("fill", "#555")
+            .text("Revenue");
+    }
     
     function drawShippingChart(data) {
         const container = d3.select("#chart4-shipping"); container.html("");
