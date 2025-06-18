@@ -511,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     .attr("stroke-dasharray", totalLength + " " + totalLength)
                     .attr("stroke-dashoffset", totalLength)
                     .transition()
-                    .duration(1000)
+                    .duration(700)
                     .ease(d3.easeLinear)
                     .attr("stroke-dashoffset", 0);
             });
@@ -535,7 +535,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("r", 5)
             .style("opacity", 0)  // start hidden
             .transition()
-            .delay(1000)          // wait until line animation ends
+            .delay(700)          // wait until line animation ends
             .duration(500)
             .style("opacity", 1)
             .selection()          // return selection for chaining below
