@@ -210,8 +210,8 @@
         <div id="tactical-dashboard" class="hidden">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div class="chart-container">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Subscription Program Value</h3>
-                    <p class="text-sm text-gray-500 mb-4">Comparing key metrics for subscribers vs. non-subscribers.</p>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Category-wise Revenue Distribution</h3>
+                    <p class="text-sm text-gray-500 mb-4">Visualizes revenue contribution of each product category.</p>
                     <div id="tactical-chart-category-treemap"></div>
                 </div>
 
@@ -1087,7 +1087,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .attr("opacity", 0)
         .text(d => d.data.name)
         .attr("fill", "#fff")
-        .style("font-size", "11px")
+        .style("font-size", "13px")
         .style("pointer-events", "none")
         .transition()
         .duration(600)
@@ -1098,7 +1098,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("y", 30)
             .text(d => d3.format("$,.0f")(d.data.value))
             .attr("fill", "#fff")
-            .style("font-size", "11px")
+            .style("font-size", "13px")
             .style("pointer-events", "none");
 
         nodes.append("text")
@@ -1106,7 +1106,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("y", 45)
             .text(d => `${(d.data.value / totalValue * 100).toFixed(1)}%`)
             .attr("fill", "#fff")
-            .style("font-size", "11px")
+            .style("font-size", "13px")
             .style("pointer-events", "none");
 
         // Back button
@@ -1435,15 +1435,6 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("y", innerHeight + 35)
             .attr("text-anchor", "middle")
             .attr("fill", "#374151")
-            .text("Total Purchase Amount (USD)");
-
-        // Y Label (optional)
-        svg.append("text")
-            .attr("transform", "rotate(-90)")
-            .attr("x", -innerHeight / 2)
-            .attr("y", -margin.left + 20)
-            .attr("text-anchor", "middle")
-            .attr("fill", "#374151")
     }
 
     function drawDiscountChart(data) {
@@ -1452,7 +1443,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const width = container.node().getBoundingClientRect().width;
     const height = 400;
-    const margin = { top: 20, right: 20, bottom: 100, left: 60 };
+    const margin = { top: 30, right: 20, bottom: 30, left: 60 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -1521,8 +1512,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .attr("transform", `translate(0, ${innerHeight})`)
         .call(d3.axisBottom(x0))
         .selectAll("text")
-        .attr("transform", "rotate(-45)")
-        .style("text-anchor", "end")
+        .style("text-anchor", "middle")
         .style("font-size", "15px");
 
     // Bars
@@ -1537,7 +1527,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const group = d3.select(this);
 
         discountStatus.forEach(status => {
-            const value = dataAgg.get(item)?.get(status) || 0;
+            const records = data.filter(d => d.item_purchased === item && d.discount_applied === status);
+            const value = d3.sum(records, d => d.purchase_amount_usd); // Revenue
+            const count = records.length; // Number of transactions
+
             const barX = x1(status);
             const barWidth = x1.bandwidth();
             const barY = y(value);
@@ -1552,7 +1545,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 .on("mouseover", (event) => tooltip.style("opacity", 1))
                 .on("mousemove", (event) => {
                     tooltip.html(
-                        `<strong>${item}</strong><br>Discount: ${status}<br>Revenue: ${d3.format("$,.0f")(value)}`
+                        `<strong>${item}</strong><br>Discount: ${status}<br>Revenue: ${d3.format("$,.0f")(value)}<br>Sold: ${count}`
                     )
                         .style("left", event.pageX + 15 + "px")
                         .style("top", event.pageY - 28 + "px");
@@ -1563,12 +1556,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 .attr("y", barY)
                 .attr("height", barHeight)
                 .on("end", function() {
+                    // Count label
+                    group.append("text")
+                        .attr("class", "bar-label")
+                        .attr("x", barX + barWidth / 2)
+                        .attr("y", barY - 18)
+                        .attr("text-anchor", "middle")
+                        .style("font-size", "13px")
+                        .style("fill", "#111827")
+                        .text(`${count}`);
+
+                    // Revenue label
                     group.append("text")
                         .attr("class", "bar-label")
                         .attr("x", barX + barWidth / 2)
                         .attr("y", barY - 5)
                         .attr("text-anchor", "middle")
-                        .style("font-size", "12px")
+                        .style("font-size", "13px")
                         .style("fill", "#111827")
                         .text(d3.format("$,.0f")(value));
                 });
@@ -1581,7 +1585,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .enter()
         .append("g")
         .attr("class", "legend")
-        .attr("transform", (d, i) => `translate(${innerWidth - 200 + i * 120}, ${-15})`);
+        .attr("transform", (d, i) => `translate(${innerWidth - 180 + i * 100}, ${-30})`);
 
     legend.append("rect")
         .attr("x", 0)
