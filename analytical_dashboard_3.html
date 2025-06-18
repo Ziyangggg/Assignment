@@ -1218,8 +1218,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const arc = d3.arc().innerRadius(radius * 0.5).outerRadius(radius * 0.8);
 
         const outerArc = d3.arc()
-            .innerRadius(radius * 0.95)
-            .outerRadius(radius * 0.95);
+            .innerRadius(radius * 0.76)
+            .outerRadius(radius * 0.76);
 
         svg.selectAll('path')
             .data(data_ready)
@@ -1250,7 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("text-anchor", d => (d.endAngle + d.startAngle) / 2 > Math.PI ? "end" : "start")
             .attr("font-size", "12px")
             .attr("fill", "#333")
-            .text(d => `${d.data.key} (${d.data.value})`);
+            .text(d => `${d.data.key}(${d.data.value})`);
 
         svg.selectAll("polyline")
             .data(data_ready)
