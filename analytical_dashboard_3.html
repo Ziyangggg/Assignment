@@ -212,7 +212,7 @@
                 <div class="chart-container">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">Subscription Program Value</h3>
                     <p class="text-sm text-gray-500 mb-4">Comparing key metrics for subscribers vs. non-subscribers.</p>
-                    <div id="tactical-chart-subscription"></div>
+                    <div id="tactical-chart-category-treemap"></div>
                 </div>
 
 
@@ -395,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
             (category === 'All' || d.category === category)
         );
 
-        drawSubscriptionValueChart(fullData);
+        drawCategoryTreemap(filteredData);
         populateItemFilter(filteredData);
         drawItemPurchasedChart(filteredData);
         drawDiscountChart(filteredData);
@@ -999,59 +999,125 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- TACTICAL CHARTS ---
 
-    function drawSubscriptionValueChart(data) {
-        const container = d3.select("#tactical-chart-subscription"); container.html("");
+    function drawCategoryTreemap(data) {
+        const container = d3.select("#tactical-chart-category-treemap");
+        container.html("");
+
         const width = container.node().getBoundingClientRect().width;
-        const height = 350;
-        const margin = { top: 40, right: 20, bottom: 60, left: 60 };
-        const innerWidth = width - margin.left - margin.right;
-        const innerHeight = height - margin.top - margin.bottom;
-        const svg = container.append("svg").attr("width", width).attr("height", height).append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+        const height = 400;
 
-        const dataAgg = d3.rollup(data, v => ({
-            avgSpent: d3.mean(v, d => d.purchase_amount_usd),
-            avgRating: d3.mean(v, d => d.review_rating)
-        }), d => d.subscription_status);
-        
-        const metrics = ['Avg. Purchase ($)', 'Avg. Rating (1-5)'];
-        const statuses = ['Yes', 'No'];
+        // Initial render for category view
+        renderTreemap(data, "category");
+    }
 
-        const x0 = d3.scaleBand().domain(metrics).rangeRound([0, innerWidth]).padding(.2);
-        const x1 = d3.scaleBand().domain(statuses).rangeRound([0, x0.bandwidth()]).padding(0.05);
-        const ySpent = d3.scaleLinear().domain([0, d3.max(statuses, s => dataAgg.get(s)?.avgSpent) || 100]).rangeRound([innerHeight, 0]);
-        const yRating = d3.scaleLinear().domain([0, 5]).rangeRound([innerHeight, 0]);
+    function renderTreemap(data, level, filterValue = null) {
+        const container = d3.select("#tactical-chart-category-treemap");
+        container.html(""); // Clear
 
-        const color = d3.scaleOrdinal().domain(statuses).range(['#16a34a', '#d1d5db']); // Green for subs, gray for non-subs
+        const width = container.node().getBoundingClientRect().width;
+        const height = 400;
 
-        svg.append("g").call(d3.axisBottom(x0));
-        svg.append("g").call(d3.axisLeft(ySpent).tickFormat(d3.format("$,.0f")));
-        
-        const metricGroup = svg.selectAll(".metric-group").data(metrics).enter().append("g")
-            .attr("class", "metric-group").attr("transform", d => `translate(${x0(d)},0)`);
+        // Filter data if drilling into items
+        const filteredData = filterValue
+            ? data.filter(d => d.category === filterValue)
+            : data;
 
-        metricGroup.selectAll("rect")
-            .data(d_metric => statuses.map(s => ({
-                key: s, 
-                value: d_metric === metrics[0] ? dataAgg.get(s)?.avgSpent : dataAgg.get(s)?.avgRating,
-                metric: d_metric
-            })))
-            .enter().append("rect")
-            .attr("x", d => x1(d.key)).attr("width", x1.bandwidth())
-            .attr("y", d => d.metric === metrics[0] ? ySpent(d.value) : yRating(d.value))
-            .attr("height", d => innerHeight - (d.metric === metrics[0] ? ySpent(d.value) : yRating(d.value)))
-            .attr("fill", d => color(d.key))
-            .on("mouseover", (event, d) => tooltip.style("opacity", 1))
-            .on("mousemove", (event, d) => {
-                 const formattedValue = d.metric === metrics[0] ? formatCurrency(d.value) : formatRating(d.value);
-                tooltip.html(`<strong>Subscriber: ${d.key}</strong><br>${d.metric}: ${formattedValue}`)
-                    .style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
-            })
-            .on("mouseout", () => tooltip.style("opacity", 0));
-        
-        const legend = svg.selectAll(".legend").data(statuses).enter().append("g").attr("class", "legend")
-            .attr("transform", (d, i) => `translate(${innerWidth - 240 + i * 120}, ${-25})`);
-        legend.append("rect").attr("x", 0).attr("width", 12).attr("height", 12).style("fill", color);
-        legend.append("text").attr("x", 18).attr("y", 9).attr("dy", ".1em").style("text-anchor", "start").text(d => `Subscriber: ${d}`).attr("font-size", "12px");
+        // Rollup data based on level
+        const rolled = Array.from(
+            d3.rollup(
+                filteredData,
+                v => d3.sum(v, d => d.purchase_amount_usd),
+                d => level === "category" ? d.category : d.item_purchased
+            ),
+            ([name, value]) => ({ name, value })
+        );
+
+        const totalValue = d3.sum(rolled, d => d.value);
+
+        // Hierarchy for treemap
+        const root = d3.hierarchy({ children: rolled })
+            .sum(d => d.value)
+            .sort((a, b) => b.value - a.value);
+
+        d3.treemap().size([width, height]).padding(2)(root);
+
+        const svg = container.append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        const color = d3.scaleOrdinal(d3.schemeTableau10);
+
+        const nodes = svg.selectAll("g")
+            .data(root.leaves())
+            .enter()
+            .append("g")
+            .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+        // Rectangle
+        nodes.append("rect")
+        .attr("width", 0)
+        .attr("height", 0)
+        .attr("fill", d => color(d.data.name))
+        .style("cursor", d => level === "category" ? "pointer" : "default")
+        .on("click", (event, d) => {
+            if (level === "category") {
+                renderTreemap(data, "item", d.data.name); // Drill into category
+            }
+        })
+        .on("mouseover", (event, d) => tooltip.style("opacity", 1))
+        .on("mousemove", (event, d) => {
+            tooltip.html(
+                `<strong>${d.data.name}</strong><br>
+                Revenue: ${d3.format("$,.0f")(d.data.value)}<br>
+                Share: ${(d.data.value / totalValue * 100).toFixed(1)}%`
+            )
+            .style("left", event.pageX + 15 + "px")
+            .style("top", event.pageY - 28 + "px");
+        })
+        .on("mouseout", () => tooltip.style("opacity", 0))
+        .transition() // animation AFTER binding events
+        .duration(600)
+        .attr("width", d => d.x1 - d.x0)
+        .attr("height", d => d.y1 - d.y0);
+
+        // Labels
+        nodes.append("text")
+        .attr("x", 5)
+        .attr("y", 15)
+        .attr("opacity", 0)
+        .text(d => d.data.name)
+        .attr("fill", "#fff")
+        .style("font-size", "11px")
+        .style("pointer-events", "none")
+        .transition()
+        .duration(600)
+        .attr("opacity", 1);
+
+        nodes.append("text")
+            .attr("x", 5)
+            .attr("y", 30)
+            .text(d => d3.format("$,.0f")(d.data.value))
+            .attr("fill", "#fff")
+            .style("font-size", "11px")
+            .style("pointer-events", "none");
+
+        nodes.append("text")
+            .attr("x", 5)
+            .attr("y", 45)
+            .text(d => `${(d.data.value / totalValue * 100).toFixed(1)}%`)
+            .attr("fill", "#fff")
+            .style("font-size", "11px")
+            .style("pointer-events", "none");
+
+        // Back button
+        if (level === "item") {
+            container.append("button")
+                .text("← Back to Categories")
+                .style("margin-top", "10px")
+                .style("padding", "6px 12px")
+                .style("font-size", "15px")
+                .on("click", () => renderTreemap(data, "category"));
+        }
     }
 
     function drawPaymentDonutChart(data, itemName) {
