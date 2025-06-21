@@ -292,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryFilter.classList.remove('hidden');
 
         if (isDataLoaded) {
-            drawTacticalDashboard(currentSeason, currentCategory);
+            drawTacticalDashboard(currentSeason, currentCategory, selectedState);
             isTacticalDrawn = true;
         }
     });
@@ -334,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (activeTab === 'analytical') {
             updateAnalyticalDashboard(currentSeason, hexGeo, selectedState, selectedCategory, selectedDiscount);
         } else if (activeTab === 'tactical') {
-            drawTacticalDashboard(currentSeason, currentCategory);
+            drawTacticalDashboard(currentSeason, currentCategory, selectedState);
         }
     });
 
@@ -346,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Only tactical dashboard uses category
         if (activeTab === 'tactical') {
-            drawTacticalDashboard(currentSeason, currentCategory);
+            drawTacticalDashboard(currentSeason, currentCategory, selectedState);
         }
     });
 
@@ -380,11 +380,13 @@ document.addEventListener('DOMContentLoaded', () => {
         drawShippingChart(filteredData);
     }
 
-    function drawTacticalDashboard(season, category) {
+    function drawTacticalDashboard(season, category, selectedState) {
         if (!isDataLoaded) return;
+
         const filteredData = fullData.filter(d =>
             (season === 'All Year' || d.season === season) &&
-            (category === 'All' || d.category === category)
+            (category === 'All' || d.category === category) &&
+            (selectedState && selectedState !== 'All' ? d.state_abbr === selectedState : true)
         );
 
         drawCategoryTreemap(filteredData);
